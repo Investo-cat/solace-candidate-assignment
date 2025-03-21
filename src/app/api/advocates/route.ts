@@ -2,13 +2,15 @@ import db from "../../../db";
 import { advocates } from "../../../db/schema";
 import { advocateData } from "../../../db/seed/advocates";
 import { Advocate } from "@/types/page";
+import { PAGE_PER_COUNT } from "@/constants";
 
 export async function POST(req: Request) {
   const body = await req.json();
   const {
     search: searchTerm,
     category: categories,
-  }: { search: string; category: string[] } = body;
+    currentPage,
+  }: { search: string; category: string[]; currentPage: number } = body;
 
   const data = advocateData;
 
@@ -46,6 +48,10 @@ export async function POST(req: Request) {
   }
 
   return Response.json({
-    data: result,
+    total: result.length,
+    data: result.slice(
+      PAGE_PER_COUNT * (currentPage - 1),
+      PAGE_PER_COUNT * currentPage
+    ),
   });
 }
