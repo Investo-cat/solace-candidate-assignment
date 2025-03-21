@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import MultiSelectSearch from "@/components/multiSelectSearch";
 import { Advocate } from "@/types/page";
+import { API_URL } from "@/constants";
 
 const options: Record<keyof Advocate, string> = {
   firstName: "First Name",
@@ -15,25 +16,35 @@ const options: Record<keyof Advocate, string> = {
 };
 
 export default function Home() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [isError, setIsError] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [advocates, setAdvocates] = useState<Advocate[]>([]);
-  // remove filtered advocate -> TODO: implement search on backend side
 
   useEffect(() => {
-    console.log("fetching advocates...");
-    fetch("/api/advocates").then((response) => {
-      response.json().then((jsonResponse) => {
-        setAdvocates(jsonResponse.data);
-      });
-    });
-  }, []);
+    setIsLoading(true);
+    setIsError(false);
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        search: searchTerm,
+        category: selected,
+      }),
+    })
+      .then((response) => response.json())
+      .then(({ data }) => setAdvocates(data))
+      .catch(() => setIsError(true))
+      .finally(() => setIsLoading(false));
+  }, [searchTerm, selected]);
 
   return (
     <main className="overflow-hidden">
       <div className="h-screen flex flex-col p-8">
         <h1>Solace Advocates</h1>
-        <MultiSelectSearch // TODO: debounced search
+        <MultiSelectSearch
           options={options}
           setSelected={setSelected}
           setInputValue={setSearchTerm}
