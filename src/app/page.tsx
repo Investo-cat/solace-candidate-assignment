@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import MultiSelectSearch from "@/components/multiSelectSearch";
+import Collapse from "@/components/collapse";
 import { Advocate } from "@/types/page";
 import { API_URL } from "@/constants";
 
@@ -77,9 +78,7 @@ export default function Home() {
                     <td className="border px-4 py-2">{advocate.city}</td>
                     <td className="border px-4 py-2">{advocate.degree}</td>
                     <td className="border px-4 py-2">
-                      {advocate.specialties.map((s, index) => (
-                        <div key={index}>{s}</div>
-                      ))}
+                      <Collapse data={advocate.specialties} />
                     </td>
                     <td className="border px-4 py-2">
                       {advocate.yearsOfExperience}
