@@ -1,8 +1,8 @@
 import db from "../../../db";
 import { advocates } from "../../../db/schema";
-import { advocateData } from "../../../db/seed/advocates";
 import { Advocate } from "@/types/page";
 import { PAGE_PER_COUNT } from "@/constants";
+import { eq, ilike, or, SQL, sql } from "drizzle-orm";
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -12,46 +12,56 @@ export async function POST(req: Request) {
     currentPage,
   }: { search: string; category: string[]; currentPage: number } = body;
 
-  const data = advocateData;
+  const filters: SQL<unknown>[] = [];
 
-  let result: Advocate[];
-  if (!searchTerm) {
-    result = data;
-  } else if (categories.length === 0) {
-    result = data.filter((advocate) => {
-      return (
-        advocate.firstName.toLowerCase().includes(searchTerm) ||
-        advocate.lastName.toLowerCase().includes(searchTerm) ||
-        advocate.city.toLowerCase().includes(searchTerm) ||
-        advocate.degree.toLowerCase().includes(searchTerm) ||
-        advocate.specialties.some((specialty) =>
-          specialty.toLowerCase().includes(searchTerm)
-        ) ||
-        advocate.yearsOfExperience.toString().toLowerCase().includes(searchTerm)
+  if (searchTerm) {
+    const searchPattern = `%${searchTerm}%`;
+
+    if (categories.length === 0) {
+      // Apply a broad search across relevant fields
+      filters.push(
+        ilike(advocates.firstName, searchPattern),
+        ilike(advocates.lastName, searchPattern),
+        ilike(advocates.city, searchPattern),
+        ilike(advocates.degree, searchPattern),
+        sql`EXISTS (SELECT 1 FROM unnest(${advocates.specialties}) AS s WHERE s ILIKE ${searchPattern})`
       );
-    });
-  } else {
-    result = data.filter((advocate) => {
-      return categories.some((category) => {
-        if (category !== "specialties") {
-          return advocate[category as keyof Advocate]
-            .toString()
-            .toLowerCase()
-            .includes(searchTerm);
-        } else {
-          return advocate.specialties.some((specialty) =>
-            specialty.toLowerCase().includes(searchTerm)
+      if (!Number.isNaN(parseInt(searchTerm))) {
+        filters.push(eq(advocates.yearsOfExperience, parseInt(searchTerm)));
+      }
+    } else {
+      // Search only in specified categories
+      for (const category of categories) {
+        if (["firstName", "lastName", "city", "degree"].includes(category)) {
+          filters.push(
+            ilike(advocates[category as keyof Advocate], searchPattern)
+          );
+        } else if (category === "yearsOfExperience") {
+          if (!Number.isNaN(parseInt(searchTerm))) {
+            filters.push(eq(advocates.yearsOfExperience, parseInt(searchTerm)));
+          }
+        } else if (category === "specialties") {
+          filters.push(
+            sql`EXISTS (SELECT 1 FROM unnest(${advocates.specialties}) AS s WHERE s ILIKE ${searchPattern})`
           );
         }
-      });
-    });
+      }
+    }
   }
 
-  return Response.json({
-    total: result.length,
-    data: result.slice(
-      PAGE_PER_COUNT * (currentPage - 1),
-      PAGE_PER_COUNT * currentPage
-    ),
-  });
+  const totalCountQuery = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(advocates)
+    .where(filters.length > 0 ? or(...filters) : undefined);
+
+  const totalCount = totalCountQuery[0]?.count ?? 0;
+
+  const data = await db
+    .select()
+    .from(advocates)
+    .where(filters.length > 0 ? or(...filters) : undefined)
+    .limit(PAGE_PER_COUNT)
+    .offset(PAGE_PER_COUNT * (currentPage - 1));
+
+  return Response.json({ total: totalCount, data });
 }
